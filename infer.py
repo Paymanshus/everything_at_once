@@ -40,7 +40,7 @@ def arg_infer(inf_in, config):
     else:
         clip_text_model = None
 
-    #! initialize needs to be changed to remove args
+    #! initialize needs to be changed to remove args OR keep and use config dict
     # kwargs: config file
     model = config.initialize('arch', module_arch)
 
@@ -48,6 +48,34 @@ def arg_infer(inf_in, config):
     data_loader = config.initialize('data_loader', module_data)
 
     metrics = [RetrievalMetric(met) for met in config['metrics']]
+# ---------------------------------------------------------------------------- #
+    # load torch pretrained model, config params
+    checkpoint = torch.load(config.resume, map_location=device)
+    epoch = checkpoint['epoch']
+
+    # load state_dict, then fix comparing with newly created model state_dict
+    state_dict = checkpoint['state_dict']
+    new_state_dict = state_dict_data_parallel_fix(
+        state_dict, model.state_dict())
+    model.load_state_dict(new_state_dict, strict=True)
+
+    if config['n_gpu'] > 1:
+        model = torch.nn.DataParallel(model)
+
+    # prepare model for testing
+    model = model.to(device)
+    model.eval()
+
+    nested_metrics, val_loss, val_loss_detailed = eval(model, data_loader, device, metrics,
+                                                       loss_func=None,
+                                                       clip_text_model=clip_text_model)
+
+    short_verbose(epoch=epoch, dl_nested_metrics=nested_metrics,
+                  dataset_name=data_loader.dataset_name)
+    for metric in metrics:
+        metric_name = metric.__name__
+        res = nested_metrics[metric_name]
+        verbose(epoch=epoch, metrics=res, name="", mode=metric_name)
 
 
 def main():

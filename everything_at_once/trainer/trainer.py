@@ -192,7 +192,9 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
     with torch.no_grad():
         for data in tqdm.tqdm(dl):
             data = format_dataloader_output(data)
-
+            # ***
+            print(f"Separate data print: {data}")
+            
             meta_arr.append(data['meta'])
             ids_arr.extend(data['meta']['ids'])
 
