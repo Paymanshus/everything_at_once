@@ -19,7 +19,11 @@ ex = Experiment('test')
 
 @ex.main
 def run():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if config['n_gpu'] == 0:
+        device = torch.device('cpu')
+    else:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # build model architecture
     if config['trainer'].get("use_clip_text_model", False):
@@ -35,10 +39,12 @@ def run():
 
     metrics = [RetrievalMetric(met) for met in config['metrics']]
 
-    checkpoint = torch.load(config.resume)
+    # 'cpu' if n_gpu == 0 or not toch.cuda.is_available() else None)
+    checkpoint = torch.load(config.resume, map_location=device)
     epoch = checkpoint['epoch']
     state_dict = checkpoint['state_dict']
-    new_state_dict = state_dict_data_parallel_fix(state_dict, model.state_dict())
+    new_state_dict = state_dict_data_parallel_fix(
+        state_dict, model.state_dict())
     model.load_state_dict(new_state_dict, strict=True)
 
     if config['n_gpu'] > 1:
@@ -52,7 +58,8 @@ def run():
                                                        loss_func=None,
                                                        clip_text_model=clip_text_model)
 
-    short_verbose(epoch=epoch, dl_nested_metrics=nested_metrics, dataset_name=data_loader.dataset_name)
+    short_verbose(epoch=epoch, dl_nested_metrics=nested_metrics,
+                  dataset_name=data_loader.dataset_name)
     for metric in metrics:
         metric_name = metric.__name__
         res = nested_metrics[metric_name]
@@ -69,7 +76,7 @@ if __name__ == '__main__':
     args.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')
 
-   # custom cli options to modify configuration from default values given in json file.
+    # custom cli options to modify configuration from default values given in json file.
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
         CustomArgs(['--n_gpu'], type=int, target=('n_gpu',)),

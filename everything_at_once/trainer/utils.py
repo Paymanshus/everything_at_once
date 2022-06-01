@@ -17,17 +17,22 @@ def average_embeddings(ids_arr, embed_arr, verbose=False):
         for name, embed in embed_arr.items():
             labels = torch.LongTensor(indexed_ids).to(embed.device)
             labels = labels.view(labels.size(0), 1).expand(-1, embed.size(1))
-            unique_labels, labels_count = labels.unique(dim=0, return_counts=True)
+            unique_labels, labels_count = labels.unique(
+                dim=0, return_counts=True)
 
-            res = torch.zeros_like(unique_labels, dtype=embed.dtype).scatter_add_(0, labels, embed)
+            res = torch.zeros_like(
+                unique_labels, dtype=embed.dtype).scatter_add_(0, labels, embed)
             embed_arr[name] = res / labels_count.float().unsqueeze(1)
 
             # if there were items that we wanted to skip (id=-1):
             if '-1' in index:
                 bad_label = index['-1']
-                idx_bad_label = (unique_labels[:, 0] == bad_label).nonzero(as_tuple=True)[0] #https://stackoverflow.com/questions/47863001/how-pytorch-tensor-get-the-index-of-specific-value
+                # https://stackoverflow.com/questions/47863001/how-pytorch-tensor-get-the-index-of-specific-value
+                idx_bad_label = (unique_labels[:, 0] == bad_label).nonzero(
+                    as_tuple=True)[0]
                 if verbose:
-                    print('Percent of skipped:', (labels == bad_label).sum() / (labels.shape[0] * labels.shape[1]) )
+                    print('Percent of skipped:', (labels == bad_label).sum(
+                    ) / (labels.shape[0] * labels.shape[1]))
                 embed = embed_arr[name]
                 if idx_bad_label == 0:
                     embed = embed[1:]
@@ -85,11 +90,19 @@ def format_dataloader_output(data):
         for field in ['video', 'video_mask', 'audio', 'audio_mask', 'text', 'text_mask', 'audio_STFT_nframes', 'y_true']:
             if field in data:
                 data[field] = data[field].view(-1, *data[field].shape[2:])
+                # *** prints added
+                print(
+                    f"Data field: {data[field]}, shape: {data[field].shape}, field: {field}")
 
-        data['raw_text'] = list(itertools.chain.from_iterable(zip(*data['raw_text'])))  # TODO: make it more clean
+        data['raw_text'] = list(itertools.chain.from_iterable(
+            zip(*data['raw_text'])))  # TODO: make it more clean
+        print(f"Raw text: {data['raw_text']}")
+
         data['meta'] = {
-            'dataset': list(itertools.chain.from_iterable(zip(*data['meta']['dataset']))),  # TODO: make it more clean
+            # TODO: make it more clean
+            'dataset': list(itertools.chain.from_iterable(zip(*data['meta']['dataset']))),
             'paths': list(itertools.chain.from_iterable(zip(*data['meta']['paths']))),
             'ids': list(itertools.chain.from_iterable(zip(*data['meta']['ids'])))
         }
+        print(f"Meta (dataset, paths, ids): {data['meta']}")
     return data
