@@ -15,7 +15,83 @@ FEATURES_PATH = './data/msrvtt/resnet/msrvtt_jsfusion_test.pkl'
 MODEL_PATH = './pretrained_models/everything_at_once_tva/latest_model.pth'
 
 
-def infer(inf_in, model_path, config_path, clip_text=False):
+# goes in trainer.py with eval()
+def infer(inf_in, model, dl, device, metrics, loss_func=None, clip_text_model=None):
+    """Run single input inference using loaded model.
+
+    Args:
+        inf_in (str): Path to inference input file.
+        model (nn.Module): Loaded model to run inference on.
+        dl (torch.utils.data.DataLoader): DataLoader for inference data.
+        device (torch.device): Device to run inference on.
+        metrics (list): List of metrics to run inference with.
+        loss_func (nn.Module): Loss function to run inference with.
+        clip_text_model (nn.Module): Clip text model to run inference with.
+    """
+    torch.cuda.empty_cache()
+
+    # total_val_loss = 0
+    # total_val_loss_detailed = collections.defaultdict(lambda: 0)
+    # meta_arr = []  # maybe keep for top-n results?
+    ids_arr = []
+    # embed_arr = collections.defaultdict(lambda: [])
+    
+    # 
+    with torch.no_grad():
+        
+        # TODO: Structure
+        #? data loading manually? single instance/point dataloading
+        #! create text features: dataset.utils
+        # ^ follow msrvtt_dataset
+        # ^ we -> word2vec from path
+        # caption = self.data[idx]['eval_caption']
+        # idx?
+        # returns dict {'video': video, ... 'text': text}
+        
+        #! format dataloader output after this
+        
+        #! data to_device
+        
+        #! get embeds by using model() on data
+        #? cross_modal? what happens if false
+        # seemed to accomodate for single modality
+        
+        # _embed in embed.name?
+        
+        # loss
+        # loss, loss_info = loss_func(embed)
+        
+        # embed array, can make an array of a single embed instead?
+        # dont need to average embeddings, or run it on single
+        
+        # sims (cosine similarity)
+        # text_embed2video_embed/audio_embed
+        # -> t2v/a
+        # sim matrix for single w all in dataset?
+        #? how does sim matrix work
+        
+        # metrics
+        #? metric(sims, size=1?) what does this do
+        # try doing this manually for 1 embed input
+        
+        
+        # format data
+        # TODO: Change format_dataloader_output for single instance inference
+        data = format_data_item(inf_in)
+        
+        if clip_text_model is not None:
+                data = _apply_clip_text_model(clip_text_model, data, device)
+
+        # considiering only text input
+        #! need to send in the entire dataloader?
+        data = _move_to_device(data, device)
+        
+        embeds = model(data)
+        
+        
+
+
+def infer_load(inf_in, model_path, config_path, clip_text=False):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if clip_text:
@@ -25,11 +101,11 @@ def infer(inf_in, model_path, config_path, clip_text=False):
     else:
         clip_text_model = None
 
-    model =
+    model = 
     pass
 
 
-def arg_infer(inf_in, config):
+def arg_infer_load(inf_in, config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # build model architecture
@@ -48,7 +124,7 @@ def arg_infer(inf_in, config):
     data_loader = config.initialize('data_loader', module_data)
 
     metrics = [RetrievalMetric(met) for met in config['metrics']]
-# ---------------------------------------------------------------------------- #
+
     # load torch pretrained model, config params
     checkpoint = torch.load(config.resume, map_location=device)
     epoch = checkpoint['epoch']
@@ -64,18 +140,22 @@ def arg_infer(inf_in, config):
 
     # prepare model for testing
     model = model.to(device)
-    model.eval()
+    model.eval()  # eval mode pt
 
-    nested_metrics, val_loss, val_loss_detailed = eval(model, data_loader, device, metrics,
-                                                       loss_func=None,
-                                                       clip_text_model=clip_text_model)
+    metrics, vid_id, co_sim = infer(inf_in, model, data_loader, device, metrics,
+                                    loss_func=None, clip_text_model=clip_text_model)
 
-    short_verbose(epoch=epoch, dl_nested_metrics=nested_metrics,
-                  dataset_name=data_loader.dataset_name)
-    for metric in metrics:
-        metric_name = metric.__name__
-        res = nested_metrics[metric_name]
-        verbose(epoch=epoch, metrics=res, name="", mode=metric_name)
+    # eval code
+    # nested_metrics, val_loss, val_loss_detailed = eval(model, data_loader, device, metrics,
+    #                                                 loss_func=None,
+    #                                                 clip_text_model=clip_text_model)
+
+    # short_verbose(epoch=epoch, dl_nested_metrics=nested_metrics,
+    #               dataset_name=data_loader.dataset_name)
+    # for metric in metrics:
+    #     metric_name = metric.__name__
+    #     res = nested_metrics[metric_name]
+    #     verbose(epoch=epoch, metrics=res, name="", mode=metric_name)
 
 
 def main():
@@ -97,10 +177,10 @@ def main():
     # custom cli options to modify configuration from default values given in json file.
     config = ConfigParser(args, test=True)
     args = args.parse_args()
-    ``
+
     # TODO: Switch to infer from arg_infer
     # infer(inf_in, dataset_ch='') # , clip_text=False
-    arg_infer(inf_in, config)
+    arg_infer_load(inf_in, config)
 
 
 if __name__ == '__main__':

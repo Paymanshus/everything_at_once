@@ -104,5 +104,33 @@ def format_dataloader_output(data):
             'paths': list(itertools.chain.from_iterable(zip(*data['meta']['paths']))),
             'ids': list(itertools.chain.from_iterable(zip(*data['meta']['ids'])))
         }
+        # ***
+        print(f"Meta (dataset, paths, ids): {data['meta']}")
+        input()
+    return data
+
+
+# ***
+def format_data_item(data):
+    if data.get('unroll_clips', [False])[0]:
+        # TODO: make it more clean
+        # We need to unroll clip axis if we samples several clips for one item
+        for field in ['video', 'video_mask', 'audio', 'audio_mask', 'text', 'text_mask', 'audio_STFT_nframes', 'y_true']:
+            if field in data:
+                data[field] = data[field].view(-1, *data[field].shape[2:])
+                # *** prints added
+                print(
+                    f"Data field: {data[field]}, shape: {data[field].shape}, field: {field}")
+
+        data['raw_text'] = list(itertools.chain.from_iterable(
+            zip(*data['raw_text'])))  # TODO: make it more clean
+        print(f"Raw text: {data['raw_text']}")
+
+        data['meta'] = {
+            # TODO: make it more clean
+            'dataset': list(itertools.chain.from_iterable(zip(*data['meta']['dataset']))),
+            'paths': list(itertools.chain.from_iterable(zip(*data['meta']['paths']))),
+            'ids': list(itertools.chain.from_iterable(zip(*data['meta']['ids'])))
+        }
         print(f"Meta (dataset, paths, ids): {data['meta']}")
     return data

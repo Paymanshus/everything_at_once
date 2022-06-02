@@ -26,12 +26,15 @@ class Trainer(BaseTrainer):
         self.scaler = GradScaler()
 
         cfg_trainer = config['trainer']
-        self.max_samples_per_epoch = cfg_trainer.get('max_samples_per_epoch', None)
+        self.max_samples_per_epoch = cfg_trainer.get(
+            'max_samples_per_epoch', None)
         self.mixed_precision = cfg_trainer.get("mixed_precision", False)
-        self.use_eval_mode_always = cfg_trainer.get("use_eval_mode_always", False)
+        self.use_eval_mode_always = cfg_trainer.get(
+            "use_eval_mode_always", False)
         self.save_latest = cfg_trainer.get('save_latest', True)
 
-        self.use_clip_text_model = cfg_trainer.get("use_clip_text_model", False)
+        self.use_clip_text_model = cfg_trainer.get(
+            "use_clip_text_model", False)
         if self.use_clip_text_model:
             import clip
             device, device_ids = self._prepare_device(config['n_gpu'])
@@ -73,7 +76,8 @@ class Trainer(BaseTrainer):
             data = format_dataloader_output(data)
 
             if self.clip_text_model is not None:
-                data = _apply_clip_text_model(self.clip_text_model, data, self.device)
+                data = _apply_clip_text_model(
+                    self.clip_text_model, data, self.device)
 
             for field in ['text', 'text_mask', 'video', 'video_mask', 'audio', 'audio_mask', 'audio_STFT_nframes']:
                 if field in data:
@@ -96,8 +100,10 @@ class Trainer(BaseTrainer):
 
             if self.writer is not None:
                 for loss_name, loss_value in loss_info.items():
-                    self.writer.log_scalar(f'loss_train_{loss_name}', loss_value, step=self.step)
-                self.writer.log_scalar(f'loss_train', loss.detach().item(), step=self.step)
+                    self.writer.log_scalar(
+                        f'loss_train_{loss_name}', loss_value, step=self.step)
+                self.writer.log_scalar(
+                    f'loss_train', loss.detach().item(), step=self.step)
 
             total_loss += loss.detach().item()
             total_iter += 1
@@ -150,11 +156,14 @@ class Trainer(BaseTrainer):
                 nested_metrics[dl_idx] = dl_nested_metrics
 
                 if self.writer is not None:
-                    self.writer.log_scalar(f'loss_val_{dl_idx}', dl_val_loss, step=epoch)
+                    self.writer.log_scalar(
+                        f'loss_val_{dl_idx}', dl_val_loss, step=epoch)
                     for loss_name, loss_value in dl_val_loss_detailed.items():
-                        self.writer.log_scalar(f'loss_val_{loss_name}_{dl_idx}', loss_value, step=epoch)
+                        self.writer.log_scalar(
+                            f'loss_val_{loss_name}_{dl_idx}', loss_value, step=epoch)
 
-                short_verbose(epoch=epoch, dl_nested_metrics=dl_nested_metrics, dataset_name=dl.dataset_name)
+                short_verbose(
+                    epoch=epoch, dl_nested_metrics=dl_nested_metrics, dataset_name=dl.dataset_name)
                 for metric in self.metrics:
                     metric_name = metric.__name__
                     res = dl_nested_metrics[metric_name]
@@ -193,8 +202,8 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
         for data in tqdm.tqdm(dl):
             data = format_dataloader_output(data)
             # ***
-            print(f"Separate data print: {data}")
-            
+            # print(f"Separate data print: {data}")
+
             meta_arr.append(data['meta'])
             ids_arr.extend(data['meta']['ids'])
 
@@ -218,7 +227,8 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
             del data, embeds
 
     val_loss = total_val_loss / len(dl)
-    val_loss_detailed = {loss_name: loss_value / len(dl) for loss_name, loss_value in total_val_loss_detailed.items()}
+    val_loss_detailed = {loss_name: loss_value /
+                         len(dl) for loss_name, loss_value in total_val_loss_detailed.items()}
 
     # compute scores
     nested_metrics = {}
@@ -227,8 +237,12 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
         embed_arr[name] = torch.cat(embed, dim=0)
         print(embed_arr[name].shape)
 
+    # ***
+    print(f"Embed array shape before averaging: {embed_arr.shape}")
     # needed for 'cut_clips: true' ablation
     embed_arr = average_embeddings(ids_arr, embed_arr, verbose=True)
+    print(f"Embed array shape after averaging: {embed_arr.shape}")
+    input()
 
     sims = {}
     for name1 in ['text_embed', 'video_embed', 'audio_embed']:
@@ -236,11 +250,17 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
             continue
         embed1 = embed_arr[name1]
         for name2, embed2 in embed_arr.items():
-            name1 = name1.replace('_embed', '').replace('text', 't').replace('audio', 'a').replace('video', 'v')
-            name2 = name2.replace('_embed', '').replace('text', 't').replace('audio', 'a').replace('video', 'v')
+            name1 = name1.replace('_embed', '').replace(
+                'text', 't').replace('audio', 'a').replace('video', 'v')
+            name2 = name2.replace('_embed', '').replace(
+                'text', 't').replace('audio', 'a').replace('video', 'v')
             if name1 in name2 or f'{name2}2{name1}' in sims:
                 continue
-            sims[f'{name1}2{name2}'] = sim_matrix(embed1, embed2).detach().cpu().numpy()
+            sims[f'{name1}2{name2}'] = sim_matrix(
+                embed1, embed2).detach().cpu().numpy()
+    # ***
+    print(f"Sims: {sims}")
+    input()
 
     for metric in metrics:
         metric_name = metric.__name__
