@@ -20,7 +20,6 @@ class FeatureDataloader(BaseDataLoaderExplicitSplit):
                  num_workers=1,
                  shuffle=True):
 
-
         word2vec_path = dataset_kwargs.pop('word2vec_path')
         global we
         if we is None:
@@ -44,10 +43,12 @@ class FeatureDataloader(BaseDataLoaderExplicitSplit):
             dataset = Youcook_Dataset(**dataset_kwargs, we=we)
         elif 'CrossTask' in dataset_name:
             assert batch_size == 1
-            dataset = CrossTaskMiningYoutubeDataset(**dataset_kwargs, we=we, mining_youtube=False)
+            dataset = CrossTaskMiningYoutubeDataset(
+                **dataset_kwargs, we=we, mining_youtube=False)
         elif 'MiningYoutube' in dataset_name:
             assert batch_size == 1
-            dataset = CrossTaskMiningYoutubeDataset(**dataset_kwargs, we=we, mining_youtube=True)
+            dataset = CrossTaskMiningYoutubeDataset(
+                **dataset_kwargs, we=we, mining_youtube=True)
         else:
             raise NotImplementedError(f"Dataset: {dataset_name} not found.")
 
@@ -55,3 +56,4 @@ class FeatureDataloader(BaseDataLoaderExplicitSplit):
                          drop_last=drop_last)
 
         self.dataset_name = dataset_name
+        self.we = we

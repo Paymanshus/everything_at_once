@@ -57,25 +57,34 @@ class EverythingAtOnceModel(nn.Module):
             assert video_max_tokens is not None
             assert text_max_tokens is not None
             assert audio_max_num_STFT_frames is not None
-            self.video_pos_embed = nn.Parameter(torch.zeros(1, video_max_tokens, embed_dim))
-            self.text_pos_embed = nn.Parameter(torch.zeros(1, text_max_tokens, embed_dim))
-            self.audio_pos_embed = nn.Parameter(torch.zeros(1, self.audio_max_tokens, embed_dim))
+            self.video_pos_embed = nn.Parameter(
+                torch.zeros(1, video_max_tokens, embed_dim))
+            self.text_pos_embed = nn.Parameter(
+                torch.zeros(1, text_max_tokens, embed_dim))
+            self.audio_pos_embed = nn.Parameter(
+                torch.zeros(1, self.audio_max_tokens, embed_dim))
         else:
             self.video_pos_embed = None
             self.text_pos_embed = None
             self.audio_pos_embed = None
 
         audio_embed_dim = 4096 if davenet_v2 else 1024
-        self.video_token_proj = get_projection(video_embed_dim, embed_dim, token_projection)
-        self.text_token_proj = get_projection(text_embed_dim, embed_dim, token_projection)
-        self.audio_token_proj = get_projection(audio_embed_dim, embed_dim, token_projection)
-        
+        self.video_token_proj = get_projection(
+            video_embed_dim, embed_dim, token_projection)
+        self.text_token_proj = get_projection(
+            text_embed_dim, embed_dim, token_projection)
+        self.audio_token_proj = get_projection(
+            audio_embed_dim, embed_dim, token_projection)
+
         if not self.individual_projections:
             self.proj = get_projection(embed_dim, projection_dim, projection)
         else:
-            self.video_proj = get_projection(embed_dim, projection_dim, projection)
-            self.text_proj = get_projection(embed_dim, projection_dim, projection)
-            self.audio_proj = get_projection(embed_dim, projection_dim, projection)
+            self.video_proj = get_projection(
+                embed_dim, projection_dim, projection)
+            self.text_proj = get_projection(
+                embed_dim, projection_dim, projection)
+            self.audio_proj = get_projection(
+                embed_dim, projection_dim, projection)
 
         self.init_weights()
 
@@ -90,15 +99,20 @@ class EverythingAtOnceModel(nn.Module):
         # if all tokens of modality is empty, add one masking token
         empty_input_mask = nonempty_input_mask == 0
         n_masking_tokens = 1
-        x[empty_input_mask, :n_masking_tokens] = self.fusion.masking_token.type(x.dtype)
+        x[empty_input_mask, :n_masking_tokens] = self.fusion.masking_token.type(
+            x.dtype)
         attention_mask[empty_input_mask, :n_masking_tokens] = 1
         return x, attention_mask, nonempty_input_mask
 
     def extract_video_tokens(self, video, attention_mask):
+        # ***
+
+        x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(
+            x, attention_mask)
         x = self.video_token_proj(video)
         x = self.video_norm_layer(x)
 
-        x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(x, attention_mask)
+        # x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(x, attention_mask)
         special_token_mask = attention_mask == 0
 
         return {'all_tokens': x, 'attention_mask': attention_mask, 'special_token_mask': special_token_mask,
@@ -109,7 +123,8 @@ class EverythingAtOnceModel(nn.Module):
         audio = audio.permute(0, 2, 1)
 
         coef = int(np.ceil(attention_mask.shape[1] / audio.shape[1]))
-        attention_mask = torch.nn.functional.max_pool1d(attention_mask.unsqueeze(0), kernel_size=coef).squeeze(0)
+        attention_mask = torch.nn.functional.max_pool1d(
+            attention_mask.unsqueeze(0), kernel_size=coef).squeeze(0)
         audio_STFT_nframes = (audio_STFT_nframes / coef).int()
 
         if (self.audio_max_tokens is not None) and (audio.shape[1] > self.audio_max_tokens):
@@ -125,7 +140,8 @@ class EverythingAtOnceModel(nn.Module):
         audio = self.audio_token_proj(audio)
         audio = self.audio_norm_layer(audio)
 
-        audio, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(audio, attention_mask)
+        audio, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(
+            audio, attention_mask)
         special_token_mask = attention_mask == 0
         return {'all_tokens': audio, 'attention_mask': attention_mask, 'special_token_mask': special_token_mask,
                 'nonempty_input_mask': nonempty_input_mask}
@@ -134,7 +150,8 @@ class EverythingAtOnceModel(nn.Module):
         x = self.text_token_proj(text)
         x = self.text_norm_layer(x)
 
-        x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(x, attention_mask)
+        x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(
+            x, attention_mask)
         special_token_mask = attention_mask == 0
         return {'all_tokens': x, 'attention_mask': attention_mask, 'special_token_mask': special_token_mask,
                 'nonempty_input_mask': nonempty_input_mask}
@@ -142,18 +159,24 @@ class EverythingAtOnceModel(nn.Module):
     def forward(self, data, force_cross_modal=False):
         output = {}
 
-        text_raw_embed = self.extract_text_tokens(data['text'], data['text_mask'])
-        video_raw_embed = self.extract_video_tokens(data['video'], data['video_mask'])
-        audio_raw_embed = self.extract_audio_tokens(data['audio'], data['audio_mask'], data['audio_STFT_nframes'])
+        text_raw_embed = self.extract_text_tokens(
+            data['text'], data['text_mask'])
+        video_raw_embed = self.extract_video_tokens(
+            data['video'], data['video_mask'])
+        audio_raw_embed = self.extract_audio_tokens(
+            data['audio'], data['audio_mask'], data['audio_STFT_nframes'])
         output['text_nonempty_input_mask'] = text_raw_embed['nonempty_input_mask']
         output['video_nonempty_input_mask'] = video_raw_embed['nonempty_input_mask']
         output['audio_nonempty_input_mask'] = audio_raw_embed['nonempty_input_mask']
 
         # add positional embedding after masking
         if self.use_positional_emb:
-            text_raw_embed['all_tokens'] = text_raw_embed['all_tokens'] + self.text_pos_embed
-            video_raw_embed['all_tokens'] = video_raw_embed['all_tokens'] + self.video_pos_embed
-            audio_raw_embed['all_tokens'] = audio_raw_embed['all_tokens'] + self.audio_pos_embed
+            text_raw_embed['all_tokens'] = text_raw_embed['all_tokens'] + \
+                self.text_pos_embed
+            video_raw_embed['all_tokens'] = video_raw_embed['all_tokens'] + \
+                self.video_pos_embed
+            audio_raw_embed['all_tokens'] = audio_raw_embed['all_tokens'] + \
+                self.audio_pos_embed
 
         text = self.fusion(text=text_raw_embed)['text']
         video = self.fusion(video=video_raw_embed)['video']
@@ -207,17 +230,22 @@ class EverythingAtOnceModel_TV_Only(EverythingAtOnceModel):
     def forward(self, data, force_cross_modal=False):
         output = {}
 
-        text_raw_embed = self.extract_text_tokens(data['text'], data['text_mask'])
-        video_raw_embed = self.extract_video_tokens(data['video'], data['video_mask'])
-        audio_raw_embed = self.extract_audio_tokens(data['audio'], data['audio_mask'], data['audio_STFT_nframes'])
+        text_raw_embed = self.extract_text_tokens(
+            data['text'], data['text_mask'])
+        video_raw_embed = self.extract_video_tokens(
+            data['video'], data['video_mask'])
+        audio_raw_embed = self.extract_audio_tokens(
+            data['audio'], data['audio_mask'], data['audio_STFT_nframes'])
         output['text_nonempty_input_mask'] = text_raw_embed['nonempty_input_mask']
         output['video_nonempty_input_mask'] = video_raw_embed['nonempty_input_mask']
         output['audio_nonempty_input_mask'] = audio_raw_embed['nonempty_input_mask']
 
         # add positional embedding after masking
         if self.use_positional_emb:
-            text_raw_embed['all_tokens'] = text_raw_embed['all_tokens'] + self.text_pos_embed
-            video_raw_embed['all_tokens'] = video_raw_embed['all_tokens'] + self.video_pos_embed
+            text_raw_embed['all_tokens'] = text_raw_embed['all_tokens'] + \
+                self.text_pos_embed
+            video_raw_embed['all_tokens'] = video_raw_embed['all_tokens'] + \
+                self.video_pos_embed
 
         text = self.fusion(text=text_raw_embed)['text']
         video = self.fusion(video=video_raw_embed)['video']
@@ -269,9 +297,12 @@ class TransformerPerModalityModel(EverythingAtOnceModel):
     def forward(self, data, force_cross_modal=False):
         output = {}
 
-        text_raw_embed = self.extract_text_tokens(data['text'], data['text_mask'])
-        video_raw_embed = self.extract_video_tokens(data['video'], data['video_mask'])
-        audio_raw_embed = self.extract_audio_tokens(data['audio'], data['audio_mask'], data['audio_STFT_nframes'])
+        text_raw_embed = self.extract_text_tokens(
+            data['text'], data['text_mask'])
+        video_raw_embed = self.extract_video_tokens(
+            data['video'], data['video_mask'])
+        audio_raw_embed = self.extract_audio_tokens(
+            data['audio'], data['audio_mask'], data['audio_STFT_nframes'])
 
         output['text_nonempty_input_mask'] = text_raw_embed['nonempty_input_mask']
         output['video_nonempty_input_mask'] = video_raw_embed['nonempty_input_mask']

@@ -37,8 +37,10 @@ class MSRVTT_Dataset(Dataset):
     ):
         assert use_2D or use_3D
         self.data = pickle.load(open(data_path, 'rb'))
-        self.data_2D = self.data if data_path_2D is None else pickle.load(open(data_path_2D, 'rb'))
-        self.data_3D = self.data if data_path_3D is None else pickle.load(open(data_path_3D, 'rb'))
+        self.data_2D = self.data if data_path_2D is None else pickle.load(
+            open(data_path_2D, 'rb'))
+        self.data_3D = self.data if data_path_3D is None else pickle.load(
+            open(data_path_3D, 'rb'))
         self.use_2D = use_2D
         self.use_3D = use_3D
         self.key_2d = key_2d
@@ -84,14 +86,16 @@ class MSRVTT_Dataset(Dataset):
             feat_2d = torch.from_numpy(self.data_2D[idx][self.key_2d]).float()
         if self.use_3D:
             feat_3d = torch.from_numpy(self.data_3D[idx][self.key_3d]).float()
-            
+
         target_nvideo_tokens = self.n_video_tokens * self.n_clips
-        video, video_mask = create_video_features(feat_2d, feat_3d, target_nvideo_tokens, strategy=self.video_sampling_strategy)
-        
+        video, video_mask = create_video_features(
+            feat_2d, feat_3d, target_nvideo_tokens, strategy=self.video_sampling_strategy)
+
         # load audio
         audio = self.data[idx]['audio']
         max_audio_STFT_nframes = self.num_audio_STFT_frames * self.n_clips
-        audio, audio_mask, audio_STFT_nframes = create_audio_features(audio, max_audio_STFT_nframes)
+        audio, audio_mask, audio_STFT_nframes = create_audio_features(
+            audio, max_audio_STFT_nframes)
 
         # choose a caption
         if self.training:
@@ -99,7 +103,8 @@ class MSRVTT_Dataset(Dataset):
         else:
             caption = self.data[idx]['eval_caption']
         words = _tokenize_text(caption)
-        text, text_mask, raw_text = create_text_features(words, self.max_words, self.we, self.we_dim)
+        text, text_mask, raw_text = create_text_features(
+            words, self.max_words, self.we, self.we_dim)
 
         # meta data
         dataset = 'MSRVTT'

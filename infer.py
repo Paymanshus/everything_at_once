@@ -1,5 +1,6 @@
 import argparse
 import collections
+import json
 import os
 import pandas as pd
 
@@ -26,7 +27,6 @@ FEATURES_PATH = './data/msrvtt/resnet/msrvtt_jsfusion_test.pkl'
 MODEL_PATH = './pretrained_models/everything_at_once_tva/latest_model.pth'
 
 
-
 def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
     '''If embed_arr does not already exist, compute embeddings for entire dataset.'''
     torch.cuda.empty_cache()
@@ -34,14 +34,31 @@ def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
     meta_arr = []
     ids_arr = []
     embed_arr = collections.defaultdict(lambda: [])
+    mod_shapes = {}
+    first_run_flag = True
 
     with torch.no_grad():
         # complete dataset, can also use a split, .pkl format
         for data in tqdm.tqdm(dl):
+
+            # if first_run_flag:
+            #     for k, v in data.items():
+            #         mod_shapes[k] = v.shape
+            #     first_run_flag = False
+
+            if first_run_flag:
+                for k, v in data.items():
+                    if k == 'meta':
+                        continue
+                    mod_shapes[k] = v.shape
+                first_run_flag = False
+
             data = format_dataloader_output(data)
 
             meta_arr.append(data['meta'])
             ids_arr.extend(data['meta']['ids'])
+
+            # TODO: Link ids with embed_arr
 
             if clip_text_model is not None:
                 data = _apply_clip_text_model(clip_text_model, data, device)
@@ -67,6 +84,8 @@ def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
     # needed for 'cut_clips: true' ablation
     embed_arr = average_embeddings(ids_arr, embed_arr, verbose=True)
 
+    json.dump(mod_shapes, open('./results/mod_shapes.json', 'w'))
+
     return embed_arr
 
 
@@ -79,11 +98,20 @@ def process_single_text(query, we, max_words=20, we_dim=300):
     return text, text_mask, raw_text
 
 
-def embed_single_text(text, text_mask, model, device):
+def embed_single_text(text, text_mask, raw_text, model, device):
     '''send in a text in the format of the eav model, pad for video and audio modalities,
     get text embeddings in the form of multimodal embeddings with single filled embedding'''
-    text_data = {'text': text, 'text_mask': text_mask, 'video': None, 'video_mask': None,
-                 'audio': None, 'audio_mask': None, 'audio_STFT_nframes': None, 'caption': None, 'image': None}
+
+    text_data = {'text': text, 'text_mask': text_mask, 'raw_text': raw_text}
+    mod_shapes = json.load(open('./results/mod_shapes.json'))
+    for k, v in mod_shapes.items():
+        if k not in text_data.keys():
+            text_data[k] = torch.zeros(v)
+
+    # text_data = {'text': text, 'text_mask': text_mask, 'raw_text': raw_text, 'video': None, 'video_mask': None,
+    #              'audio': None, 'audio_mask': None, 'audio_STFT_nframes': None, 'unroll_clips': None, 'meta':
+    #                  {'paths': 'inf_path', 'ids': 'inf', 'dataset': 'MSRVTT'}}
+    # torch.empty()
 
     text_data['text'] = _move_to_device(text_data['text'], device)
     text_data['text_mask'] = _move_to_device(text_data['text_mask'], device)
@@ -151,19 +179,16 @@ def run_inference_arg(inf_in, config):
                                   clip_text_model=clip_text_model)
 
     # word2vec path from config
-    print(
-        f"data_loader we stuff: {data_loader.word2vec_path}, {data_loader.we}")
     # word2vec_path = dataset_kwargs.pop('word2vec_path')
-    word2vec_path = data_loader.word2vec_path
-    word2vec_path = '.data/GoogleNews-vectors-negative300.bin'
-    global we
-    if we is None:
-        we = KeyedVectors.load_word2vec_format(word2vec_path, binary=True)
-    else:
-        print('Using loaded we')
+    we = data_loader.we
+    # word2vec_path = '.data/GoogleNews-vectors-negative300.bin'
+    # if we is None:
+    #     we = KeyedVectors.load_word2vec_format(word2vec_path, binary=True)
+    # else:
+    #     print('Using loaded we')
 
     text, text_mask, raw_text = process_single_text(inf_in, we)
-    text_embed = embed_single_text(text, text_mask, model, device)
+    text_embed = embed_single_text(text, text_mask, raw_text, model, device)
 
     inf_sims = similarity_computation(text_embed, embed_arr)
 
@@ -191,17 +216,20 @@ def run_inference_arg(inf_in, config):
 
 def main():
 
+    args = argparse.ArgumentParser(description='PyTorch Template')
     # TODO: Remove argparse for API method inferencing, create config dict manually from input instead
     args.add_argument('-r', '--resume', required=True, type=str,
                       help='path to latest checkpoint (default: None)')
     args.add_argument('-c', '--config', default=True, type=str,
                       help='config file path (default: None)')
-
+    args.add_argument('-d', '--device', default=None, type=str,
+                      help='indices of GPUs to enable (default: all)')
     # n_gpu = torch.cuda.device_count()
 
     # taking in inference text
     inf_in_path = './data/test/text_queries/'
     inf_in = os.path.join(inf_in_path, 'query_1.txt')
+    inf_in = "The quick brown fox jumps over the lazy dog"
 
     dataset_ch = 'msrvtt'  # 'msrvtt' 'youcook'
 
@@ -216,12 +244,6 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
 
 
 # # goes in trainer.py with eval()
