@@ -238,10 +238,10 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
         print(embed_arr[name].shape)
 
     # ***
-    print(f"Embed array shape before averaging: {embed_arr.shape}")
+    print(f"Embed array before averaging: {embed_arr}")
     # needed for 'cut_clips: true' ablation
     embed_arr = average_embeddings(ids_arr, embed_arr, verbose=True)
-    print(f"Embed array shape after averaging: {embed_arr.shape}")
+    print(f"Embed array after averaging: {embed_arr}")
     input()
 
     sims = {}
