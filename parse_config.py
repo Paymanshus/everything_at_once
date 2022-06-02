@@ -31,6 +31,7 @@ class ConfigParser:
             config = read_config(self.cfg_fname)
             self.resume = None
         else:
+            # 2 config files read: resume folder and arg parsed
             self.resume = Path(args.resume)
             resume_cfg_fname = self.resume.parent / 'config.yaml'
             config = read_config(resume_cfg_fname)
@@ -65,7 +66,8 @@ class ConfigParser:
             for dirpath in (self._save_dir, self._log_dir, self._web_log_dir):
                 config_dir = dirpath.parent
                 existing = list(config_dir.glob("*"))
-                print(f"purging {len(existing)} directories from config_dir...")
+                print(
+                    f"purging {len(existing)} directories from config_dir...")
                 tic = time.time()
                 os.system(f"rm -rf {config_dir}")
                 print(f"Finished purge in {time.time() - tic:.3f}s")
@@ -82,7 +84,7 @@ class ConfigParser:
                 2: logging.DEBUG
             }
 
-    def initialize(self, name, module,  *args, index=None, **kwargs):
+    def initialize(self, name, module, *args, index=None, **kwargs):
         """
         finds a function handle with the name given as 'type' in config, and returns the 
         instance initialized with corresponding keyword args given as 'args'.
@@ -90,7 +92,8 @@ class ConfigParser:
         if index is None:
             module_name = self[name]['type']
             module_args = dict(self[name]['args'])
-            assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
+            assert all([k not in module_args for k in kwargs]
+                       ), 'Overwriting kwargs given in config file is not allowed'
             module_args.update(kwargs)
         else:
             module_name = self[name][index]['type']

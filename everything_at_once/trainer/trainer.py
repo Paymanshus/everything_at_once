@@ -238,11 +238,11 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
         print(embed_arr[name].shape)
 
     # ***
-    print(f"Embed array before averaging: {embed_arr}")
+    # print(f"Embed array before averaging: {embed_arr}")
     # needed for 'cut_clips: true' ablation
     embed_arr = average_embeddings(ids_arr, embed_arr, verbose=True)
-    print(f"Embed array after averaging: {embed_arr}")
-    input()
+    # print(f"Embed array after averaging: {embed_arr}")
+    # input()
 
     sims = {}
     for name1 in ['text_embed', 'video_embed', 'audio_embed']:
@@ -254,13 +254,14 @@ def eval(model, dl, device, metrics, loss_func=None, clip_text_model=None):
                 'text', 't').replace('audio', 'a').replace('video', 'v')
             name2 = name2.replace('_embed', '').replace(
                 'text', 't').replace('audio', 'a').replace('video', 'v')
+            # if both are the same or already computed, skip
             if name1 in name2 or f'{name2}2{name1}' in sims:
                 continue
             sims[f'{name1}2{name2}'] = sim_matrix(
                 embed1, embed2).detach().cpu().numpy()
     # ***
-    print(f"Sims: {sims}")
-    input()
+    # print(f"Sims: {sims}")
+    # input()
 
     for metric in metrics:
         metric_name = metric.__name__
