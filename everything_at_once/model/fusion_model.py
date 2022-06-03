@@ -105,14 +105,11 @@ class EverythingAtOnceModel(nn.Module):
         return x, attention_mask, nonempty_input_mask
 
     def extract_video_tokens(self, video, attention_mask):
-        # ***
-
-        x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(
-            x, attention_mask)
         x = self.video_token_proj(video)
         x = self.video_norm_layer(x)
 
-        # x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(x, attention_mask)
+        x, attention_mask, nonempty_input_mask = self._check_and_fix_if_input_empty(
+            x, attention_mask)
         special_token_mask = attention_mask == 0
 
         return {'all_tokens': x, 'attention_mask': attention_mask, 'special_token_mask': special_token_mask,

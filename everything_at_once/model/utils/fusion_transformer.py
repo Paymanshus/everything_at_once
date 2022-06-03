@@ -26,7 +26,8 @@ class FusionTransformer(nn.Module):
 
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = act_layer or nn.GELU
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
         self.blocks = nn.Sequential(*[
             FusionBlock(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, drop=drop_rate,
@@ -34,7 +35,7 @@ class FusionTransformer(nn.Module):
             )
             for i in range(depth)])
 
-        self.norm = norm_layer(embed_dim) # TODO: not needed, remove?
+        self.norm = norm_layer(embed_dim)  # TODO: not needed, remove?
         self.init_weights()
 
     def init_weights(self):
@@ -51,7 +52,8 @@ class FusionTransformer(nn.Module):
 
         # concatenate attention masks
         tokens_mask = [x['attention_mask'] for x in data if x is not None]
-        tokens_mask = torch.cat(tokens_mask, dim=1)
+        # * removed since only one point, cant concatenate multiple arrays
+        # tokens_mask = torch.cat(tokens_mask, dim=1)
 
         # concatenate cls token
         if self.cls_token is None:
@@ -59,7 +61,8 @@ class FusionTransformer(nn.Module):
         else:
             cls_token = self.cls_token.expand(tokens.shape[0], -1, -1)
             tokens = torch.cat((cls_token, tokens), dim=1)
-            cls_token_mask = torch.ones((1, 1)).to(tokens_mask.device).expand(tokens_mask.shape[0], -1)
+            cls_token_mask = torch.ones((1, 1)).to(
+                tokens_mask.device).expand(tokens_mask.shape[0], -1)
             tokens_mask = torch.cat((cls_token_mask, tokens_mask), dim=1)
             offset = 1
 
@@ -107,7 +110,8 @@ class FusionTransformer(nn.Module):
 
         if self.cls_token is None:
             for key, value in output.items():
-                output[key]['embed'] = _get_average(value["all_tokens"], value['attention_mask'])
+                output[key]['embed'] = _get_average(
+                    value["all_tokens"], value['attention_mask'])
         else:
             modalities = list(output.keys())
             modalities = '_'.join(modalities)

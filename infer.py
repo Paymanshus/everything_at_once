@@ -118,9 +118,12 @@ def embed_single_text(text, text_mask, raw_text, model, device):
     #                  {'paths': 'inf_path', 'ids': 'inf', 'dataset': 'MSRVTT'}}
     # torch.empty()
 
-    text_data['text'] = _move_to_device(text_data['text'], device)
-    text_data['text_mask'] = _move_to_device(text_data['text_mask'], device)
-
+    # text_data['text'] = _move_to_device(text_data['text'], device)
+    # text_data['text_mask'] = _move_to_device(text_data['text_mask'], device)
+    for field in ['text', 'text_mask', 'video', 'video_mask', 'audio', 'audio_mask', 'audio_STFT_nframes', 'caption', 'image']:
+        if field in text_data:
+            text_data[field] = _move_to_device(text_data[field], device)
+    model.to(device)
     text_embed = model(text_data)  # force_cross_modal=False
 
     text_embed = torch.cat(text_embed, dim=0)
