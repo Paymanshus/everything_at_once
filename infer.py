@@ -43,6 +43,8 @@ def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
 
             # if first_run_flag:
             #     for k, v in data.items():
+            #         if k == 'meta':
+            #             continue
             #         mod_shapes[k] = v.shape
             #     first_run_flag = False
 
@@ -50,7 +52,10 @@ def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
                 for k, v in data.items():
                     if k == 'meta':
                         continue
-                    mod_shapes[k] = v.shape
+                    if isinstance(v, list):
+                        mod_shapes[k] = (len(v), )
+                    else:
+                        mod_shapes[k] = v.shape
                 first_run_flag = False
 
             data = format_dataloader_output(data)
@@ -192,8 +197,8 @@ def run_inference_arg(inf_in, config):
 
     inf_sims = similarity_computation(text_embed, embed_arr)
 
-    if not os.path.exists('result/'):
-        os.mkdir('result/')
+    if not os.path.exists('results/'):
+        os.mkdir('results/')
     curr_no = sorted(os.listdir('.output/'))[-1].split('out')[1].split('.')[0]
     pd.DataFrame(inf_sims).to_csv(f"test_inf_out{curr_no}.csv")
 
