@@ -26,6 +26,12 @@ W2V_PATH = '.data/GoogleNews-vectors-negative300.bin'
 FEATURES_PATH = './data/msrvtt/resnet/msrvtt_jsfusion_test.pkl'
 MODEL_PATH = './pretrained_models/everything_at_once_tva/latest_model.pth'
 
+# TODO: scratch.ipynb
+'''- line by line reconstruction of model part, data_loader already done
+- obtain embeddings and model initialization to play around with
+- try embedding different types of data, text, etc
+- compute sim_matrix of allvall, 1vall'''
+
 
 def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
     '''If embed_arr does not already exist, compute embeddings for entire dataset.'''
@@ -48,12 +54,14 @@ def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
             #         mod_shapes[k] = v.shape
             #     first_run_flag = False
 
+            print(f"Data loader batch shape: {data.shape}")
             if first_run_flag:
                 for k, v in data.items():
                     if k == 'meta':
                         continue
                     if isinstance(v, list):
                         mod_shapes[k] = (len(v), )
+                        print(f"list to array shape for {k}: {mod_shapes[k]}")
                     else:
                         mod_shapes[k] = v.shape
                 first_run_flag = False
@@ -113,18 +121,36 @@ def embed_single_text(text, text_mask, raw_text, model, device):
         if k not in text_data.keys():
             text_data[k] = torch.zeros(v)
 
+    # text data instance to dataloader batch format
+    # text_data = text_data.reshape(1, -1)
+    text_data = text_data.unsqueeze(0)
+
+    # text_data = module_data(text_data['dataset_name'] * 16,
+    #                         {'data_path': './data/msrvtt/resnet/msrvtt_jsfusion_test.pkl',
+    #                          'max_words': 20,
+    #                          'training': False,
+    #                          'n_video_tokens': 48,
+    #                          'num_audio_STFT_frames': 3072,
+    #                          'word2vec_path': './data/GoogleNews-vectors-negative300.bin'},
+    #                         num_workers=16,
+    #                         batch_size=16,
+    #                         shuffle=False
+    #                         )
+
+    text_data = format_dataloader_output(text_data)
+
     # text_data = {'text': text, 'text_mask': text_mask, 'raw_text': raw_text, 'video': None, 'video_mask': None,
     #              'audio': None, 'audio_mask': None, 'audio_STFT_nframes': None, 'unroll_clips': None, 'meta':
     #                  {'paths': 'inf_path', 'ids': 'inf', 'dataset': 'MSRVTT'}}
-    # torch.empty()
 
     # text_data['text'] = _move_to_device(text_data['text'], device)
     # text_data['text_mask'] = _move_to_device(text_data['text_mask'], device)
-    for field in ['text', 'text_mask', 'video', 'video_mask', 'audio', 'audio_mask', 'audio_STFT_nframes', 'caption', 'image']:
-        if field in text_data:
-            text_data[field] = _move_to_device(text_data[field], device)
-    model.to(device)
-    text_embed = model(text_data)  # force_cross_modal=False
+    with torch.no_grad():
+        for field in ['text', 'text_mask', 'video', 'video_mask', 'audio', 'audio_mask', 'audio_STFT_nframes', 'caption', 'image']:
+            if field in text_data:
+                text_data[field] = _move_to_device(text_data[field], device)
+        model.to(device)
+        text_embed = model(text_data)  # force_cross_modal=False
 
     text_embed = torch.cat(text_embed, dim=0)
 
