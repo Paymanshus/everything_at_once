@@ -3,7 +3,9 @@ import collections
 import json
 import os
 import pandas as pd
+import numpy as np
 
+import gc
 import tqdm
 import pickle
 from gensim.models.keyedvectors import KeyedVectors
@@ -54,16 +56,17 @@ def compute_embed_arr(model, dl, device, metrics, clip_text_model=None):
             #         mod_shapes[k] = v.shape
             #     first_run_flag = False
 
-            print(f"Data loader batch shape: {data.shape}")
+            # print(f"Data loader batch shape: {data.shape}")
             if first_run_flag:
                 for k, v in data.items():
                     if k == 'meta':
                         continue
                     if isinstance(v, list):
                         mod_shapes[k] = (len(v), )
-                        print(f"list to array shape for {k}: {mod_shapes[k]}")
+                        # print(f"list to array shape for {k}: {mod_shapes[k]}")
                     else:
                         mod_shapes[k] = v.shape
+                        # print(f"{k} size: {v.shape}")
                 first_run_flag = False
 
             data = format_dataloader_output(data)
@@ -115,27 +118,19 @@ def embed_single_text(text, text_mask, raw_text, model, device):
     '''send in a text in the format of the eav model, pad for video and audio modalities,
     get text embeddings in the form of multimodal embeddings with single filled embedding'''
 
-    text_data = {'text': text, 'text_mask': text_mask, 'raw_text': raw_text}
+    # text.view(1, *list(text.shape)).shape
+    text_data = {'text': text.unsqueeze(
+        0), 'text_mask': text_mask.unsqueeze(0), 'raw_text': raw_text}
     mod_shapes = json.load(open('./results/mod_shapes.json'))
     for k, v in mod_shapes.items():
         if k not in text_data.keys():
-            text_data[k] = torch.zeros(v)
-
-    # text data instance to dataloader batch format
-    # text_data = text_data.reshape(1, -1)
-    text_data = text_data.unsqueeze(0)
-
-    # text_data = module_data(text_data['dataset_name'] * 16,
-    #                         {'data_path': './data/msrvtt/resnet/msrvtt_jsfusion_test.pkl',
-    #                          'max_words': 20,
-    #                          'training': False,
-    #                          'n_video_tokens': 48,
-    #                          'num_audio_STFT_frames': 3072,
-    #                          'word2vec_path': './data/GoogleNews-vectors-negative300.bin'},
-    #                         num_workers=16,
-    #                         batch_size=16,
-    #                         shuffle=False
-    #                         )
+            print(f"{k} not in text_data keys")
+            try:
+                text_data[k] = torch.zeros(
+                    1, *list(v)[1:])  # v is a torch shape
+            except:
+                # for 1-D shape sizes
+                text_data[k] = torch.zeros(1)
 
     text_data = format_dataloader_output(text_data)
 
@@ -150,32 +145,75 @@ def embed_single_text(text, text_mask, raw_text, model, device):
             if field in text_data:
                 text_data[field] = _move_to_device(text_data[field], device)
         model.to(device)
-        text_embed = model(text_data)  # force_cross_modal=False
+        text_embed_dict = model(text_data)  # force_cross_modal=False
 
-    text_embed = torch.cat(text_embed, dim=0)
+    for name, embed in text_embed_dict.items():
+        if 'text_embed' in name:
+            # text_embed[k] = embed.cpu() -> for keeping the entire dict
+            text_embed = embed.cpu()  # for keeping only text embedding
+
+    # for name, embed in embed_arr.items():
+    #     embed_arr[name] = torch.cat(embed, dim=0)
+    #     print(embed_arr[name].shape)
+    # text_embed = torch.cat(text_embed, dim=0)
 
     text_embed = average_embeddings(['inf_text'], text_embed, verbose=True)
     return text_embed
 
 
-def similarity_computation(text_embed, embed_arr):
+def inf_similarity_computation(text_embed, embed_arr):
     # requires computation of entire dataset, can do out of distribution inference after that
-
-    sims = {}
+    inf_sims = {}
     #  text_embed: embed1: inference embed of text
     for embed_name, embed in embed_arr.items():
+        embed_name = embed_name.split('_embed')[0]
         # if text is second embed name or already computed, skip
-        if 'text' in embed_name or f't2{embed_name}' in sims:
+        if 'text' in embed_name or f't2{embed_name}' in inf_sims:
             continue
 
         # get tensor similarity matrix, convert to numpy
-        sims[f't2{embed_name}'] = sim_matrix(
-            text_embed, embed).detach().cpu().numpy()
+        s = sim_matrix(text_embed, embed).detach().cpu().numpy()  # (1, 968)
+        inf_sims[f't2{embed_name}'] = np.asarray(
+            [s] * s.shape[1]).squeeze()  # (968, 968)
 
-    return sims
+    return inf_sims
+
+
+def rank_sim(sims, data, k=5, hide_gt=False):
+    '''singular sims (one2one)
+    data: dataloader.dataset
+    k: top k to visualize
+    ref: https://github.com/m-bain/frozen-in-time/blob/9d61b2c3f9c0232e8010bd6fe9c4c4d9361bfc05/utils/visualizer.py#L84'''
+    dists = -sims
+    sample = np.random.choice(np.arange(dists.shape[0]), size=dists.shape[1],
+                              replace=False)
+    sorted_ranks = np.argsort(dists, axis=1)
+    gt_dists = np.diag(-sims)  # [:, np.newaxis]
+
+    rankings = []
+    for ii in sample:
+        ranked_idx = sorted_ranks[ii][:k]
+        gt_captions = data[ii]['raw_text']
+        # if args.sample_single_gt_caption:
+        #     gt_captions = np.random.choice(gt_captions, 1).tolist()
+        datum = {
+            "gt-sim": -gt_dists[ii],
+            "gt-captions": gt_captions,
+            "gt-rank": np.where(sorted_ranks[ii] == ii)[0],  # [0],
+            "gt-path": data[ii]['meta']["paths"],
+            "top-k-sims": -dists[ii][ranked_idx],
+            "top-k-paths": [data[r]['meta']["paths"] for r in ranked_idx],
+            "hide-gt": hide_gt,
+        }
+        rankings.append(datum)
+
+    return rankings
 
 
 def run_inference_arg(inf_in, config):
+    if not os.path.exists('results/'):
+        os.mkdir('results/')
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # build model architecture
@@ -212,28 +250,29 @@ def run_inference_arg(inf_in, config):
     embed_arr = compute_embed_arr(model, data_loader, device, metrics,
                                   clip_text_model=clip_text_model)
 
-    # word2vec path from config
-    # word2vec_path = dataset_kwargs.pop('word2vec_path')
-    we = data_loader.we
-    # word2vec_path = '.data/GoogleNews-vectors-negative300.bin'
-    # if we is None:
-    #     we = KeyedVectors.load_word2vec_format(word2vec_path, binary=True)
-    # else:
-    #     print('Using loaded we')
+    #! we = data_loader.dataset.we
 
-    text, text_mask, raw_text = process_single_text(inf_in, we)
+    text, text_mask, raw_text = process_single_text(
+        inf_in, data_loader.dataset.we)
     text_embed = embed_single_text(text, text_mask, raw_text, model, device)
 
-    inf_sims = similarity_computation(text_embed, embed_arr)
+    inf_sims = inf_similarity_computation(text_embed, embed_arr)
 
-    if not os.path.exists('results/'):
-        os.mkdir('results/')
-    curr_no = sorted(os.listdir('.output/'))[-1].split('out')[1].split('.')[0]
-    pd.DataFrame(inf_sims).to_csv(f"test_inf_out{curr_no}.csv")
+    inf_rankings = {}
+    for name, sim in inf_sims.items():
+        inf_rankings[name] = rank_sim(sim, data_loader.dataset, k=5)
+
+    try:
+        curr_no = sorted(os.listdir('.results/')
+                         )[-1].split('out')[1].split('.')[0]
+    except:
+        curr_no = 0
+
+    pd.DataFrame(inf_rankings).to_csv(f"inf_rankings{curr_no}.csv")
 
     # print top 5 most similar
 
-    return inf_sims
+    return inf_rankings
 
     # eval code
     # nested_metrics, val_loss, val_loss_detailed = eval(model, data_loader, device, metrics,

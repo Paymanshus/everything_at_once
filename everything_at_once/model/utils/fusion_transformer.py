@@ -52,7 +52,7 @@ class FusionTransformer(nn.Module):
 
         # concatenate attention masks
         tokens_mask = [x['attention_mask'] for x in data if x is not None]
-        # * removed since only one point, cant concatenate multiple arrays
+        # *** removed since only one point, cant concatenate multiple arrays
         # tokens_mask = torch.cat(tokens_mask, dim=1)
 
         # concatenate cls token

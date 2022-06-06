@@ -56,4 +56,3 @@ class FeatureDataloader(BaseDataLoaderExplicitSplit):
                          drop_last=drop_last)
 
         self.dataset_name = dataset_name
-        self.we = we
